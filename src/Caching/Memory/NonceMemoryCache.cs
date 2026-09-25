@@ -26,13 +26,13 @@ internal class NonceMemoryCache : NonceCache
     /// <param name="nonce">The unique identifier for the nonce.</param>
     /// <param name="dateRequested">The date and time the nonce was requested, used to calculate expiration.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    public override Task SetAsync(Guid nonce, DateTimeOffset dateRequested)
+    public override Task SetAsync(Guid nonce, DateTimeOffset dateRequested, int maxAgeInSeconds)
     {
         Cache.Set(
             GetKey(nonce),
             dateRequested, 
             new MemoryCacheEntryOptions
-                { AbsoluteExpiration = GetAbsoluteExpiration(dateRequested) }
+                { AbsoluteExpiration = GetAbsoluteExpiration(dateRequested, maxAgeInSeconds) }
         );
 
         return Task.CompletedTask;

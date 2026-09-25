@@ -18,13 +18,21 @@ internal static class INonceCacheExtensions
     public static async Task<bool> IsValidNonceAsync(
         this INonceCache cache, 
         Guid nonce, 
-        DateTimeOffset dateRequested
+        DateTimeOffset dateRequested,
+        int? maxAgeInSeconds = null
     )
     {
         var isValidNonce = !await cache.ContainsAsync(nonce);
         if (isValidNonce)
         {
-            await cache.SetAsync(nonce, dateRequested);
+            if (maxAgeInSeconds is { } maxAge && cache is NonceCache nonceCache)
+            {
+                await nonceCache.SetAsync(nonce, dateRequested, maxAge);
+            }
+            else
+            {
+                await cache.SetAsync(nonce, dateRequested);
+            }
         }
 
         return isValidNonce;

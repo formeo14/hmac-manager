@@ -47,10 +47,18 @@ internal class HmacAuthenticationHandler : AuthenticationHandler<HmacAuthenticat
     /// <returns>A <see cref="Task{AuthenticateResult}"/> representing the authentication outcome.</returns>
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
-        if (!ContextProvider.TryGetAuthenticationContext(Request.Headers, out var hmacAuthenticationContext))
+        HmacAuthenticationContext hmacAuthenticationContext;
+        try
         {
-            HmacLog.AuthenticationSkipped(Logger, Request.Method, Request.Path.ToString());
-            return AuthenticateResult.NoResult();
+            if (!ContextProvider.TryGetAuthenticationContext(Request.Headers, out hmacAuthenticationContext))
+            {
+                HmacLog.AuthenticationSkipped(Logger, Request.Method, Request.Path.ToString());
+                return AuthenticateResult.NoResult();
+            }
+        }
+        catch (HmacPolicyNotFoundException)
+        {
+            return AuthenticateResult.Fail(new HmacAuthenticationException());
         }
 
         var policy = hmacAuthenticationContext.Policy!;
