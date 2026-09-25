@@ -102,7 +102,7 @@ public class HmacManager : IHmacManager
             return ResultFactory.Failure();
         }
 
-        if (!await Cache.IsValidNonceAsync(incomingHmac.Nonce, incomingHmac.DateRequested))
+        if (!await Cache.IsValidNonceAsync(incomingHmac.Nonce, incomingHmac.DateRequested, Options.MaxAgeInSeconds))
         {
             HmacLog.VerificationNonceReplayed(Logger, Options.Policy, incomingHmac.Nonce);
 
