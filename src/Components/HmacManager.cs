@@ -102,13 +102,6 @@ public class HmacManager : IHmacManager
             return ResultFactory.Failure();
         }
 
-        if (!await Cache.IsValidNonceAsync(incomingHmac.Nonce, incomingHmac.DateRequested, Options.MaxAgeInSeconds))
-        {
-            HmacLog.VerificationNonceReplayed(Logger, Options.Policy, incomingHmac.Nonce);
-
-            return ResultFactory.Failure();
-        }
-
         var hmacVerification = await Factory.CreateAsync(request, incomingHmac);
         if (!hmacVerification.IsVerified(incomingHmac))
         {
@@ -119,6 +112,13 @@ public class HmacManager : IHmacManager
                 hmacVerification.Signature,
                 hmacVerification.SigningContent,
                 incomingHmac.Signature);
+
+            return ResultFactory.Failure();
+        }
+
+        if (!await Cache.IsValidNonceAsync(incomingHmac.Nonce, incomingHmac.DateRequested, Options.MaxAgeInSeconds))
+        {
+            HmacLog.VerificationNonceReplayed(Logger, Options.Policy, incomingHmac.Nonce);
 
             return ResultFactory.Failure();
         }
