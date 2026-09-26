@@ -262,6 +262,18 @@ test("HmacManager_Verify_Rejects_A_Forged_Signature_Without_Spending_The_Nonce",
     assert.isTrue(genuineResult.isSuccess);
 });
 
+test("HmacManager_Verify_Accepts_Only_One_Of_Concurrent_Replays", async () => {
+    const { signer, verifier } = createPair();
+    const request = new Request(Url);
+
+    await signer.create("Policy-A")!.sign(request);
+
+    const results = await Promise.all(
+        Array.from({ length: 32 }, () => verifier.verify(new Request(Url, { headers: request.headers }))));
+
+    assert.equal(results.filter(result => result.isSuccess).length, 1);
+});
+
 test("HmacManager_Verify_Rejects_An_Unregistered_Policy", async () => {
     const signer = new HmacManagerFactory([createPolicy()]);
     const verifier = new HmacManagerFactory([createPolicy({ name: "Policy-B" })]);
