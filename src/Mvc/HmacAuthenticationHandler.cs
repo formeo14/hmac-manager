@@ -56,8 +56,13 @@ internal class HmacAuthenticationHandler : AuthenticationHandler<HmacAuthenticat
                 return AuthenticateResult.NoResult();
             }
         }
-        catch (Exception e) when (e is HmacPolicyNotFoundException or MissingHeaderException or BadHeaderFormatException)
+        catch (HmacPolicyNotFoundException)
         {
+            return AuthenticateResult.Fail(new HmacAuthenticationException());
+        }
+        catch (Exception e) when (e is MissingHeaderException or BadHeaderFormatException)
+        {
+            HmacLog.AuthenticationHeadersInvalid(Logger);
             return AuthenticateResult.Fail(new HmacAuthenticationException());
         }
 
