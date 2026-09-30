@@ -15,8 +15,10 @@ public class Test_HmacAuthenticationHandler_MalformedOptionsHeader
     [TestCase(false, null, true)]
     [TestCase(false, "   ", true)]
     [TestCase(false, "unknown-policy", false)]
+    [TestCase(false, "MyPolicy", true, "999999999999999999")]
+    [TestCase(false, "MyPolicy", true, "-62135596800001")]
     public void Test_InvalidHeaders_FailAuthentication_WithExpectedLog(
-        bool consolidated, string? headerValue, bool expectHeaderEvent)
+        bool consolidated, string? headerValue, bool expectHeaderEvent, string? dateHeader = null)
     {
         var logger = new RecordingLogger<HmacAuthenticationHandler>();
         var services = new ServiceCollection()
@@ -45,7 +47,7 @@ public class Test_HmacAuthenticationHandler_MalformedOptionsHeader
         httpContext.Request.Headers[HmacAuthenticationDefaults.Headers.Authorization] = "Hmac x";
         httpContext.Request.Headers[HmacAuthenticationDefaults.Headers.Nonce] = Guid.NewGuid().ToString();
         httpContext.Request.Headers[HmacAuthenticationDefaults.Headers.DateRequested] =
-            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
+            dateHeader ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
         if (headerValue is not null)
         {
             httpContext.Request.Headers[consolidated
