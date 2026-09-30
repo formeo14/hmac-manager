@@ -2,6 +2,8 @@ using HmacManager.Caching;
 using HmacManager.Components;
 using HmacManager.Policies;
 using HmacManager.Schemes;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Unit.Tests.Components;
 
@@ -30,17 +32,21 @@ public class Test_HmacManager_VerifyAsync_NonceExpiry
         }
     }
 
-    private class SlowVerifyingHmacFactory : IHmacFactory
+    private class ClockAdvancingHmacFactory : IHmacFactory
     {
         private readonly IHmacFactory Inner;
         private readonly DateTimeOffset DateRequested;
-        private readonly TimeSpan Delay;
+        private readonly FakeTimeProvider Clock;
+        private readonly TimeSpan Elapsed;
+        public int VerificationCalls;
 
-        public SlowVerifyingHmacFactory(IHmacFactory inner, DateTimeOffset dateRequested, TimeSpan delay)
+        public ClockAdvancingHmacFactory(
+            IHmacFactory inner, FakeTimeProvider clock, TimeSpan elapsed)
         {
             Inner = inner;
-            DateRequested = dateRequested;
-            Delay = delay;
+            DateRequested = clock.GetUtcNow();
+            Clock = clock;
+            Elapsed = elapsed;
         }
 
         public Task<Hmac> CreateAsync(HttpRequestMessage request, string policy, Scheme? scheme = null) =>
@@ -48,13 +54,17 @@ public class Test_HmacManager_VerifyAsync_NonceExpiry
 
         public async Task<Hmac> CreateAsync(HttpRequestMessage request, HmacPartial? hmac)
         {
-            await Task.Delay(Delay);
-            return await Inner.CreateAsync(request, hmac);
+            VerificationCalls++;
+            var result = await Inner.CreateAsync(request, hmac);
+            Clock.Advance(Elapsed);
+            return result;
         }
     }
 
-    [Test]
-    public async Task Test_VerifyAsync_NonceExpiredBeforeStorage_IsFailure_CacheNotCalled()
+    [TestCase(4999, true)]
+    [TestCase(5000, false)]
+    [TestCase(5001, false)]
+    public async Task Test_VerifyAsync_RechecksExpiryBeforeStorage(int elapsedMilliseconds, bool expectedSuccess)
     {
         var maxAge = TimeSpan.FromSeconds(5);
         var privateKey = "Hii9mvaSlUm9RRLwsfuUcg==";
@@ -65,10 +75,9 @@ public class Test_HmacManager_VerifyAsync_NonceExpiry
             HeaderParser = new HmacHeaderParser()
         };
 
-        var now = DateTimeOffset.FromUnixTimeMilliseconds(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
-        var dateRequested = now - maxAge + TimeSpan.FromMilliseconds(250);
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
 
-        var factory = new SlowVerifyingHmacFactory(
+        var factory = new ClockAdvancingHmacFactory(
             new HmacFactory(new HmacSignatureProvider(new HmacSignatureProviderOptions
             {
                 Algorithms = new Algorithms
@@ -84,20 +93,22 @@ public class Test_HmacManager_VerifyAsync_NonceExpiry
                 ContentHashGenerator = new ContentHashGenerator(ContentHashAlgorithm.SHA256),
                 SignatureHashGenerator = new SignatureHashGenerator(privateKey, SigningHashAlgorithm.HMACSHA256)
             })),
-            dateRequested,
-            TimeSpan.FromMilliseconds(500)
+            clock,
+            TimeSpan.FromMilliseconds(elapsedMilliseconds)
         );
 
         var cache = new RecordingNonceCache();
         var hmacManager = new HmacManager.Components.HmacManager(
-            options, factory, new HmacResultFactory(options.Policy, null), cache);
+            options, factory, new HmacResultFactory(options.Policy, null), cache,
+            NullLogger<HmacManager.Components.HmacManager>.Instance, clock);
 
         var request = new HttpRequestMessage(HttpMethod.Get, "https://localhost/api/endpoint");
         Assert.IsTrue((await hmacManager.SignAsync(request)).IsSuccess);
 
         var result = await hmacManager.VerifyAsync(request);
 
-        Assert.IsFalse(result.IsSuccess);
-        Assert.That(cache.Calls, Is.EqualTo(0));
+        Assert.That(factory.VerificationCalls, Is.EqualTo(1));
+        Assert.That(result.IsSuccess, Is.EqualTo(expectedSuccess));
+        Assert.That(cache.Calls, Is.EqualTo(expectedSuccess ? 1 : 0));
     }
 }
